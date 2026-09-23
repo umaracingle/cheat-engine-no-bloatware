@@ -59,7 +59,7 @@ uses
   ScrollBoxEx, fileaccess, ceguicomponents, formdesignerunit, LuaCaller,
   LuaSyntax, cesupport, trainergenerator, genericHotkey,
   frmExeTrainerGeneratorUnit, luafile, xmplayer_server, xmplayer_defines,
-  ExtraTrainerComponents, frmAdConfigUnit, IconStuff, cetranslator,
+  ExtraTrainerComponents, IconStuff, cetranslator,
   frmStringMapUnit, MemFuncs, frmStringPointerScanUnit,
   frmStructPointerRescanUnit, sharedMemory, disassemblerComments,
   frmFilePatcherUnit, LuaCanvas, LuaPen, LuaFont, LuaBrush, LuaPicture, LuaMenu,
@@ -127,13 +127,9 @@ uses
 
 {$R cheatengine.res}
 {$IFDEF windows}
-//{$R manifest.res}  //lazarus now has this build in (but sucks as it explicitly turns of dpi aware)
-//{$R Sounds.rc}
-//{$R images.rc}
 {$ifdef cpu32}
 {$SetPEFlags $20}
 {$endif}
-
 {$ENDIF}
 
 {$R sounds.res}
@@ -143,11 +139,7 @@ uses
 {$R Images.res}
 {$endif}
 
-
-
-
 procedure HandleParameters;
-{Keep in mind: Responsible for not making the mainform visible}
 var i: integer;
   mainformvisible: boolean;
   p: string;
@@ -157,68 +149,47 @@ begin
   tabletoload:='';
   origin:='';
   mainformvisible:=true;
-
   try
-
     for i:=1 to Paramcount do
     begin
       p:=paramstr(i);
-
-      //ShowMessage('Param '+inttostr(i)+' = '+p);
-
       if p<>'' then
       begin
         {$ifdef darwin}
         if p='hasrights' then continue;
         {$endif}
-
         if p[1]='-' then
         begin
-          //could be -ORIGIN
           if uppercase(copy(p,1,8))='-ORIGIN:' then
             origin:=AnsiDequotedStr(copy(p,9, length(p)-8),'"');
-
         end
         else
         if (pos('.CETRAINER', uppercase(p))>0) or (pos('.CT', uppercase(p))>0) then
         begin
-          //add the path of this CT to the lua lookup
           LUA_DoScript('package.path = package.path .. [[;'+ExtractFilePath(p)+'?.lua]];');
-
           mainformvisible:=uppercase(ExtractFileExt(p))<>'.CETRAINER';
-
-          tabletoload:=p; //mark this trainer to be loaded
+          tabletoload:=p;
         end;
       end;
-
     end;
-
     if tabletoload<>'' then
     begin
-      //it needs to load a table
-      if fileexists(tabletoload)=false then //try to fix this
+      if fileexists(tabletoload)=false then
       begin
         if fileexists(WinCPToUTF8(tabletoload)) then
           tabletoload:=WinCPToUTF8(tabletoload)
-        else
-        if fileexists(UTF8ToWinCP(tabletoload)) then
+        else if fileexists(UTF8ToWinCP(tabletoload)) then
           tabletoload:=UTF8ToWinCP(tabletoload);
       end;
-
-      if origin='' then
-        origin:=ExtractFilePath(tabletoload);
-
-      if origin<>'' then
-        LUA_DoScript('TrainerOrigin=[['+origin+']]');
-
+      if origin='' then origin:=ExtractFilePath(tabletoload);
+      if origin<>'' then LUA_DoScript('TrainerOrigin=[['+origin+']]');
       try
         try
           if mainformvisible then LoadSettingsFromRegistry;
           LoadTable(tabletoload,false);
           MainForm.Savedialog1.FileName:=tabletoload;
         finally
-          if ExtractFileName(tabletoload)='CET_TRAINER.CETRAINER' then //Let's just hope no-one names their trainer exactly this...
-            DeleteFile(tabletoload);
+          if ExtractFileName(tabletoload)='CET_TRAINER.CETRAINER' then DeleteFile(tabletoload);
         end;
       except
         on e: exception do
@@ -228,30 +199,22 @@ begin
         end;
       end;
     end
-    else
-      LoadSettingsFromRegistry;
+    else LoadSettingsFromRegistry;
   except
   end;
-
-
   for i:=0 to mainform.LuaForms.count-1 do
     if tceform(mainform.luaforms[i]).visible then
     begin
-      //first visible window in the formlist becomes the new taskbar window
       try
         tceform(mainform.luaforms[i]).ShowInTaskBar:=stAlways;
         tceform(mainform.luaforms[i]).formstyle:=fsStayOnTop;
         tceform(mainform.luaforms[i]).formstyle:=fsNormal;
-
         application.title:=tceform(mainform.luaforms[i]).Caption;
         application.icon:=tceform(mainform.luaforms[i]).Icon;
       except
-
       end;
-
       break;
     end;
-
 {$ifdef darwin}
   frmmacumm.visible:=true;
 {$else}
@@ -264,135 +227,83 @@ type TFormFucker=class
     procedure addFormEvent(Sender: TObject; Form: TCustomForm);
 end;
 
-
 procedure TFormFucker.addFormEvent(Sender: TObject; Form: TCustomForm);
 begin
-  //fuuuuucking time
   if (form<>nil) and (overridefont<>nil) then
-  begin
-    if (form is TsynCompletionForm)=false then   //dus nut wurk with this
-      form.Font:=overridefont;
-  end;
+    if (form is TsynCompletionForm)=false then form.Font:=overridefont;
 end;
 
 procedure setScaledTrue;
 begin
-  application.Scaled:=true; //put it here because the lazarus ide will just nuke it on setting change otherwise
+  application.Scaled:=true;
 end;
 
 var
   i: integer;
-
   ff: TFormFucker;
   r: TRegistry;
-
-  path: string;
   noautorun: boolean;
 
 begin
   Application.Title:='Cheat Engine 7.5';
- //'Cheat Engine 7.3';
   {$ifdef darwin}
   macPortFixRegPath;
   {$endif}
   outputdebugstring('start');
-
   Application.Initialize;
-
   {$ifdef windows}
   registerDarkModeHintHandler;
   {$endif}
-
-
   overridefont:=nil;
   noautorun:=false;
-
   getcedir;
   doTranslation;
-
-
-  //first check if this is a trainer.
   istrainer:=false;
   for i:=1 to Paramcount do
-  begin
     if pos('.CETRAINER', uppercase(ParamStr(i)))>0 then
     begin
-      istrainer:=true; //a trainer could give some extra parameters like dpiaware , but that is fine
-
-      if pos('CET_TRAINER.CETRAINER', uppercase(ParamStr(i)))>0 then
-        isExeTrainer:=true;
-
+      istrainer:=true;
+      if pos('CET_TRAINER.CETRAINER', uppercase(ParamStr(i)))>0 then isExeTrainer:=true;
       break;
     end;
-  end;
-
   if istrainer then setScaledTrue;
-
-
   if not istrainer then
   begin
-    //check the user preferences
     {$ifdef darwin}
     macPortFixRegPath;
     {$endif}
-
     r := TRegistry.Create;
-
     r.RootKey := HKEY_CURRENT_USER;
-
     if r.OpenKey('\Software\'+strCheatEngine,false) then
     begin
-      if r.ValueExists('RunAsAdmin') then
+      if r.ValueExists('RunAsAdmin') and r.readbool('RunAsAdmin') then
       begin
-        if r.readbool('RunAsAdmin') then
-        begin
-          askAboutRunningAsAdmin:=false;
-          requiresAdmin;
-        end;
+        askAboutRunningAsAdmin:=false;
+        requiresAdmin;
       end;
-
-      if r.ValueExists('Override Default Font') then
-      begin
-        if r.ReadBool('Override Default Font') then
+      if r.ValueExists('Override Default Font') and r.ReadBool('Override Default Font') then
+        if r.OpenKey('Font', false) then
         begin
-          if r.OpenKey('Font', false) then
-          begin
-            overridefont:=TFont.create;
-            LoadFontFromRegistry(overridefont,r);
-
-            ff:=TFormFucker.Create;
-            screen.AddHandlerFormAdded(@ff.addFormEvent);
-
-          end;
+          overridefont:=TFont.create;
+          LoadFontFromRegistry(overridefont,r);
+          ff:=TFormFucker.Create;
+          screen.AddHandlerFormAdded(@ff.addFormEvent);
         end;
-      end;
     end;
   end;
-
   for i:=1 to Paramcount do
   begin
     if Copy(uppercase(ParamStr(i)),1,9)='FONTSIZE=' then
-    begin
       try
-        if overridefont=nil then
-          overridefont:=TFont.create;
-
+        if overridefont=nil then overridefont:=TFont.create;
         overridefont.size:=strtoint(copy(ParamStr(i), 10, length(ParamStr(i))));
         ff:=TFormFucker.Create;
         screen.AddHandlerFormAdded(@ff.addFormEvent);
-
       except
       end;
-    end;
-
-    if uppercase(ParamStr(i))='NOAUTORUN' then  //don't load any extentions yet
-      noautorun:=true;
+    if uppercase(ParamStr(i))='NOAUTORUN' then noautorun:=true;
   end;
-
-
-
   symhandlerInitialize;
-
   Application.ShowMainForm:=false;
   Application.CreateForm(TMainForm, MainForm);
   Application.CreateForm(TMemoryBrowser, MemoryBrowser);
@@ -403,19 +314,12 @@ begin
   {$ifdef darwin}
   Application.CreateForm(TfrmMacUmm, frmMacUmm);
   {$endif}
-
   initcetitle;
   {$ifdef darwin}
   macPortFixRegPath;
   {$endif}
-
   InitializeLuaScripts(noautorun);
-
   handleparameters;
-
   OutputDebugString('Starting CE');
-
-
   Application.Run;
 end.
-
